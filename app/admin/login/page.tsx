@@ -24,16 +24,16 @@ export default function AdminLoginPage() {
   const [debugInfo, setDebugInfo] = useState<string[]>([])
   const router = useRouter()
 
-  // Add debug logging function
+  // Add debug logging function - only logs to console, not UI
   const addDebugLog = (message: string) => {
     console.log(message);
+    // Still collect debug info but don't display it
     setDebugInfo(prev => [...prev, `${new Date().toISOString()}: ${message}`]);
   };
 
-  // Display debug info in development or when needed
+  // Display debug info in console only
   useEffect(() => {
-    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    if (debugInfo.length > 0 && !isLocal) {
+    if (debugInfo.length > 0) {
       console.log("Debug info:", debugInfo);
     }
   }, [debugInfo]);
@@ -231,18 +231,6 @@ export default function AdminLoginPage() {
             )}
           </Button>
         </form>
-
-        {/* Debug info section - only visible in development */}
-        {debugInfo.length > 0 && (
-          <div className="mt-6 p-3 bg-gray-800 rounded text-xs text-gray-300 max-h-40 overflow-auto">
-            <h3 className="font-bold mb-1">Debug Info:</h3>
-            <ul className="space-y-1">
-              {debugInfo.map((log, i) => (
-                <li key={i}>{log}</li>
-              ))}
-            </ul>
-          </div>
-        )}
 
         <div className="mt-6 text-center text-sm text-gray-400">
           <Link href="/" className="text-red-500 hover:text-red-400">
