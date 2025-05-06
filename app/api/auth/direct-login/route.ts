@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     
     // Set the session cookie (5 days expiration)
     const expiresIn = 60 * 60 * 24 * 5; // 5 days in seconds
-    response.cookies.set("admin_session", sessionString, {
+    response.cookies.set("session", sessionString, {
       maxAge: expiresIn,
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

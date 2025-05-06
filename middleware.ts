@@ -7,12 +7,17 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/admin") &&
     request.nextUrl.pathname !== "/admin/login"
   ) {
-    // Check for direct admin session first (our new approach)
-    const adminSession = request.cookies.get("admin_session")?.value
-    if (adminSession) {
+    // Check for session cookie
+    const session = request.cookies.get("session")?.value
+    if (!session) {
+      return NextResponse.redirect(new URL("/admin/login", request.url))
+    }
+    
+    try {
+      // First check if this is a direct admin session
       try {
-        // Decode and verify the admin session
-        const sessionData = JSON.parse(Buffer.from(adminSession, 'base64').toString());
+        // Try to decode as a direct admin session
+        const sessionData = JSON.parse(Buffer.from(session, 'base64').toString());
         
         // Check if it's a valid admin session
         if (
@@ -25,17 +30,10 @@ export async function middleware(request: NextRequest) {
           return NextResponse.next();
         }
       } catch (error) {
-        console.error("Error parsing admin session:", error);
+        // Not a direct admin session, continue with normal verification
+        console.log("Not a direct admin session, continuing with normal verification");
       }
-    }
-    
-    // Fall back to regular session check
-    const session = request.cookies.get("session")?.value || ""
-    if (!session) {
-      return NextResponse.redirect(new URL("/admin/login", request.url))
-    }
-    
-    try {
+      
       // Verify the session using our API route
       const response = await fetch(`${request.nextUrl.origin}/api/auth/verify-session`, {
         method: 'POST',
@@ -51,22 +49,20 @@ export async function middleware(request: NextRequest) {
       }
       
       const data = await response.json()
-      if (!data.valid) {
-        console.error("Invalid session:", data.error);
-        return NextResponse.redirect(new URL("/admin/login", request.url))
+      
+      if (!data.isAdmin) {
+        console.error("User is not an admin");
+        return NextResponse.redirect(new URL("/", request.url))
       }
       
-      // Check if the user is an admin
-      if (data.email !== "obsadmin@mydomainliving.co.za") {
-        console.error("Not an admin email:", data.email);
-        return NextResponse.redirect(new URL("/admin/login", request.url))
-      }
+      return NextResponse.next()
     } catch (error) {
-      console.error("Error verifying session:", error);
+      console.error("Error in middleware:", error)
       return NextResponse.redirect(new URL("/admin/login", request.url))
     }
   }
-  return NextResponse.next();
+  
+  return NextResponse.next()
 }
 
 export const config = {
