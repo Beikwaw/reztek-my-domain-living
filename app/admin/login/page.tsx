@@ -1,6 +1,8 @@
 "use client"
 
-import React, { useState } from "react"
+import type React from "react"
+
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
@@ -19,55 +21,111 @@ export default function AdminLoginPage() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [debugInfo, setDebugInfo] = useState<string[]>([])
   const router = useRouter()
+
+  // Add debug logging function
+  const addDebugLog = (message: string) => {
+    console.log(message);
+    setDebugInfo(prev => [...prev, `${new Date().toISOString()}: ${message}`]);
+  };
+
+  // Display debug info in development or when needed
+  useEffect(() => {
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (debugInfo.length > 0 && !isLocal) {
+      console.log("Debug info:", debugInfo);
+    }
+  }, [debugInfo]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError("")
+    setDebugInfo([])
 
     try {
+      addDebugLog(`Attempting admin login with email: ${email}`);
+      
+      // Special case for the hardcoded admin email
+      if (email.toLowerCase() === "obsadmin@mydomainliving.co.za") {
+        addDebugLog("Using hardcoded admin login flow");
+        
+        try {
+          // Sign in with Firebase Authentication first
+          addDebugLog("Attempting Firebase authentication");
+          const userCredential = await signInWithEmailAndPassword(auth, email, password);
+          addDebugLog("Firebase authentication successful");
+          
+          // Create direct admin session
+          addDebugLog("Creating direct admin session");
+          const response = await fetch('/api/auth/direct-login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email.toLowerCase() }),
+            credentials: 'include',
+          });
+          
+          const responseText = await response.text();
+          addDebugLog(`Direct login API response status: ${response.status}`);
+          addDebugLog(`Direct login API response: ${responseText}`);
+          
+          let responseData;
+          try {
+            responseData = JSON.parse(responseText);
+          } catch (e) {
+            addDebugLog(`Error parsing response: ${e}`);
+          }
+          
+          if (!response.ok) {
+            addDebugLog(`Direct login failed: ${JSON.stringify(responseData || {})}`);
+            setError("Failed to create admin session. Please try again.");
+            setLoading(false);
+            return;
+          }
+          
+          addDebugLog("Direct admin login successful, redirecting to dashboard");
+          // Redirect to admin dashboard
+          router.push("/admin/dashboard");
+          return;
+        } catch (error: any) {
+          addDebugLog(`Hardcoded admin login error: ${error.code || 'unknown'}: ${error.message || 'No message'}`);
+          if (error.code === "auth/invalid-credential" || error.code === "auth/wrong-password") {
+            setError("Invalid password for admin account.");
+          } else {
+            setError(error.message || "Failed to login as admin.");
+          }
+          setLoading(false);
+          return;
+        }
+      }
+      
+      // Regular flow for other admin accounts
+      addDebugLog("Using regular admin login flow");
       // Sign in with Firebase Authentication
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
       const user = userCredential.user
+      addDebugLog(`Regular Firebase auth successful for user: ${user.uid}`);
 
       // Verify this is an admin account
+      addDebugLog("Checking if user is an admin");
       const adminDoc = await getDoc(doc(db, "admins", user.uid))
 
       if (!adminDoc.exists()) {
-        // Check if it's the hardcoded admin email
-        if (email.toLowerCase() === "obsadmin@mydomainliving.co.za") {
-          // Create admin document if it doesn't exist
-          try {
-            await fetch('/api/auth/direct-login', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email: email.toLowerCase() }),
-              credentials: 'include',
-            });
-            
-            // Redirect to admin dashboard
-            router.push("/admin/dashboard")
-            return
-          } catch (error) {
-            console.error("Error creating admin session:", error)
-            setError("Failed to create admin session. Please try again.")
-            setLoading(false)
-            return
-          }
-        } else {
-          // Not an admin, sign out
-          await auth.signOut()
-          setError("This account is not registered as an admin. Please use the correct login portal.")
-          setLoading(false)
-          return
-        }
+        // Not an admin, sign out
+        addDebugLog("User is not an admin, signing out");
+        await auth.signOut()
+        setError("This account is not registered as an admin. Please use the correct login portal.")
+        setLoading(false)
+        return
       }
 
       // Get the ID token
+      addDebugLog("Getting ID token");
       const idToken = await user.getIdToken(true)
       
       // Create session cookie
+      addDebugLog("Creating session cookie");
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -75,18 +133,29 @@ export default function AdminLoginPage() {
         credentials: 'include',
       })
       
+      const responseText = await response.text();
+      addDebugLog(`Login API response status: ${response.status}`);
+      addDebugLog(`Login API response: ${responseText}`);
+      
+      let responseData;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch (e) {
+        addDebugLog(`Error parsing response: ${e}`);
+      }
+      
       if (!response.ok) {
-        const errorData = await response.json()
-        console.error("Session creation failed:", errorData)
+        addDebugLog(`Session creation failed: ${JSON.stringify(responseData || {})}`);
         setError("Failed to create admin session. Please try again.")
         setLoading(false)
         return
       }
 
       // Successful login - redirect to admin dashboard
+      addDebugLog("Login successful, redirecting to dashboard");
       router.push("/admin/dashboard")
     } catch (error: any) {
-      console.error("Login error:", error)
+      addDebugLog(`Login error: ${error.code || 'unknown'}: ${error.message || 'No message'}`);
       
       // Provide specific error messages based on error code
       if (error.code === "auth/invalid-credential" || error.code === "auth/wrong-password") {
@@ -162,6 +231,18 @@ export default function AdminLoginPage() {
             )}
           </Button>
         </form>
+
+        {/* Debug info section - only visible in development */}
+        {debugInfo.length > 0 && (
+          <div className="mt-6 p-3 bg-gray-800 rounded text-xs text-gray-300 max-h-40 overflow-auto">
+            <h3 className="font-bold mb-1">Debug Info:</h3>
+            <ul className="space-y-1">
+              {debugInfo.map((log, i) => (
+                <li key={i}>{log}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="mt-6 text-center text-sm text-gray-400">
           <Link href="/" className="text-red-500 hover:text-red-400">
