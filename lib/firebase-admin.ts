@@ -33,21 +33,30 @@ const initializeFirebaseAdmin = () => {
       initializeApp(options);
       console.log("Firebase Admin initialized with environment variables");
     } 
-    // For local development - try to use service account key file
+    // For local development - try to use service account key file or dummy data
     else {
+      console.log("Environment variables not found, trying fallback options");
+      
+      // Create a dummy service account for development if needed
+      const dummyServiceAccount = {
+        projectId: "reztek-my-domain-living",
+        clientEmail: "firebase-adminsdk-dummy@reztek-my-domain-living.iam.gserviceaccount.com",
+        privateKey: "-----BEGIN PRIVATE KEY-----\nMIIEDummyKeyForDevelopmentOnly\n-----END PRIVATE KEY-----\n"
+      };
+      
       try {
-        console.log("Trying to initialize Firebase Admin with service account key file");
-        // First try to import the real service account key
-        const serviceAccount = require("./serviceAccountKey.json");
+        // First try to dynamically import the real service account key if it exists
+        const serviceAccountPath = "./serviceAccountKeyDummy.json";
+        const serviceAccount = require(serviceAccountPath);
+        
         initializeApp({
           credential: cert(serviceAccount as any),
           storageBucket: "reztek-my-domain-living.appspot.com",
         });
-        console.log("Firebase Admin initialized with serviceAccountKey.json");
+        console.log("Firebase Admin initialized with local service account");
       } catch (error) {
-        console.log("Service account key not found, using dummy key");
-        // If real key not found, use the dummy key for development/testing
-        const dummyServiceAccount = require("./serviceAccountKeyDummy.json");
+        console.log("Service account key not found, using dummy credentials");
+        // Use dummy credentials as a last resort
         initializeApp({
           credential: cert(dummyServiceAccount as any),
           storageBucket: "reztek-my-domain-living.appspot.com",
